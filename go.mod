@@ -1,4 +1,4 @@
-module github.com/chriserin/plan_parser
+module github.com/chriserin/pgplanparser
 
 go 1.22.0
 

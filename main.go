@@ -6,9 +6,9 @@ import (
 	"os"
 	"slices"
 
-	psr "github.com/chriserin/plan_parser/parser"
-	ptr "github.com/chriserin/plan_parser/printer"
-	tkn "github.com/chriserin/plan_parser/tokenizer"
+	psr "github.com/chriserin/pgplanparser/parser"
+	ptr "github.com/chriserin/pgplanparser/printer"
+	tkn "github.com/chriserin/pgplanparser/tokenizer"
 	pgx "github.com/jackc/pgx/v5"
 )
 

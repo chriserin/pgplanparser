@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
-	tkn "github.com/chriserin/plan_parser/tokenizer"
+	tkn "github.com/chriserin/pgplanparser/tokenizer"
 )
 
 type PlannedStatement struct {

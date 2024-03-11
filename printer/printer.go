@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	psr "github.com/chriserin/plan_parser/parser"
+	psr "github.com/chriserin/pgplanparser/parser"
 )
 
 type line struct {
