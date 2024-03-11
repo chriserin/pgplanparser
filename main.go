@@ -1,107 +1,94 @@
 package main
 
 import (
-	"bytes"
+	"context"
 	"fmt"
 	"os"
+	"slices"
 
+	psr "github.com/chriserin/plan_parser/parser"
+	ptr "github.com/chriserin/plan_parser/printer"
 	tkn "github.com/chriserin/plan_parser/tokenizer"
+	pgx "github.com/jackc/pgx/v5"
 )
-
-type plannedstatement struct {
-	plantree plannode
-}
-
-type plannode struct {
-	nodetype  string
-	lefttree  *plannode
-	righttree *plannode
-}
-
-func (stmt plannedstatement) String() string {
-	return fmt.Sprintf("plantree: --- \n %s", stmt.plantree)
-}
-
-func (node plannode) String() string {
-	var b bytes.Buffer
-	if node.nodetype != "" {
-		b.WriteString("{ " + node.nodetype + " ")
-		if node.lefttree != nil {
-			b.WriteString(fmt.Sprintf("%v", node.lefttree))
-		}
-		if node.righttree != nil {
-			b.WriteString(fmt.Sprintf("%v", node.righttree))
-		}
-		b.WriteString(" }")
-		return b.String()
-	}
-	return ""
-}
 
 func main() {
 	input := os.Args[1]
 
-	plan := []rune(input)
-	value, err := parsePlan(plan)
+	parsedPlan := processPlan(input)
+
+	tables := getTables()
+
+	populateTableNames(&parsedPlan, tables)
+
+	ptr.Print(parsedPlan)
+}
+
+func processPlan(planInput string) psr.PlannedStatement {
+	plan := []rune(planInput)
+	planTokens := tkn.Tokenize(plan)
+	parsedPlan, err := psr.ParsePlan(planTokens)
+
 	if err != nil {
 		fmt.Println(err)
-		return
+		return psr.PlannedStatement{}
 	}
 
-	fmt.Println(value)
+	return parsedPlan
 }
 
-func parsePlan(plan []rune) (plannedstatement, error) {
-	planTokens := tkn.Tokenize(plan)
-
-	fmt.Println(planTokens)
-
-	statement, _ := parseStatement(planTokens)
-
-	return statement, nil
+func populateTableNames(parsedPlan *psr.PlannedStatement, tables []postgresTable) {
+	setTableName(&parsedPlan.Plantree, parsedPlan.Rtables, tables)
 }
 
-func parseStatement(tokens []tkn.Token) (plannedstatement, error) {
-	var stmt plannedstatement
-	for cursor := 0; cursor < len(tokens); cursor++ {
-		if tkn.IsKey(tokens[cursor], "plantree") {
-			plantree, _ := parseNode(&cursor, tokens)
-			stmt.plantree = plantree
+func setTableName(node *psr.PlanNode, rtables []psr.Rtable, tables []postgresTable) {
+	rtIndex := slices.IndexFunc(rtables, func(rt psr.Rtable) bool { return rt.Rindex == node.Relid })
+	if rtIndex >= 0 {
+		rtable := rtables[rtIndex]
+		ptIndex := slices.IndexFunc(tables, func(pt postgresTable) bool { return pt.relid == rtable.Relid })
+		if ptIndex >= 0 {
+			pgTable := tables[ptIndex]
+			(*node).Tablename = pgTable.relname
 		}
 	}
 
-	return stmt, nil
-}
-
-func parseNode(cursor *int, tokens []tkn.Token) (plannode, error) {
-	var node plannode
-	var currentLevel int
-	for *cursor < len(tokens) {
-		*cursor++
-		currentToken := tokens[*cursor]
-
-		if currentToken.Token == tkn.ItemId && currentLevel == 0 {
-			currentLevel = currentToken.Depth
-			fmt.Println("ENTER", currentLevel)
-			node.nodetype = currentToken.Value
-			continue
-		}
-
-		if tkn.IsKey(currentToken, "lefttree") {
-			lefttree, _ := parseNode(cursor, tokens)
-			node.lefttree = &lefttree
-		}
-
-		if tkn.IsKey(currentToken, "righttree") {
-			righttree, _ := parseNode(cursor, tokens)
-			node.righttree = &righttree
-		}
-
-		if currentToken.Token == tkn.ItemEnd && currentToken.Depth == currentLevel {
-			fmt.Println("Leave", currentLevel)
-			break
-		}
+	if node.Lefttree != nil {
+		setTableName(node.Lefttree, rtables, tables)
 	}
 
-	return node, nil
+	if node.Righttree != nil {
+		setTableName(node.Righttree, rtables, tables)
+	}
+}
+
+type postgresTable struct {
+	relid   int
+	relname string
+}
+
+func getTables() []postgresTable {
+	var tables []postgresTable
+	urlExample := "postgres://postgres@localhost:5433/postgres_air"
+	conn, err := pgx.Connect(context.Background(), urlExample)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
+		os.Exit(1)
+	}
+	defer conn.Close(context.Background())
+
+	var relid int
+	var relname string
+	rows, err := conn.Query(context.Background(), "select oid::int, relname from pg_catalog.pg_class where relnamespace = $1", 16389)
+
+	_, err = pgx.ForEachRow(rows, []any{&relid, &relname}, func() error {
+		tables = append(tables, postgresTable{relid, relname})
+		return nil
+	})
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "QueryRow failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	return tables
 }

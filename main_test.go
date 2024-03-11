@@ -1,47 +1,80 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestMain(t *testing.T) {
-	main()
-	t.Log("This is going to fail")
-	t.Fail()
-}
-
 func TestMainAgain(t *testing.T) {
-	os.Args = []string{"hello"}
+	os.Args = []string{"exename", "{PLANNEDSTMT }"}
 	main()
 }
 
 func TestParsePlanSimple(t *testing.T) {
 
-	plan_detail := "{PLANNEDSTMT :plantree {SEQSCAN lefttree {LOOPA} junk ({NOTHING x 1}) righttree {LOOPB}}}"
+	planDetail := "{PLANNEDSTMT :planTree {SEQSCAN lefttree {LOOPA} junk ({NOTHING x 1}) righttree {LOOPB}}}"
 
-	plan := []rune(plan_detail)
-	value, err := parsePlan(plan)
+	value := processPlan(planDetail)
 
-	assert.Equal(t, "SEQSCAN", value.plantree.nodetype)
-	assert.Equal(t, "LOOPA", value.plantree.lefttree.nodetype)
-	assert.Equal(t, "LOOPB", value.plantree.righttree.nodetype)
+	assert.Equal(t, "SEQSCAN", value.Plantree.Nodetype)
+	assert.Equal(t, "LOOPA", value.Plantree.Lefttree.Nodetype)
+	assert.Equal(t, "LOOPB", value.Plantree.Righttree.Nodetype)
+}
 
-	t.Log(value)
+func TestParseRtables(t *testing.T) {
 
-	if err != nil {
-		fmt.Println(err)
-		t.Fail()
-		return
-	}
+	planDetail := "{PLANNEDSTMT :rtables ({RTABLEENTRY relid 16424 junk ({NOTHING x 1})})}"
+
+	value := processPlan(planDetail)
+
+	assert.Equal(t, 16424, value.Rtables[0].Relid)
+}
+
+func TestParseAssignTableEntryId(t *testing.T) {
+
+	planDetail := "{PLANNEDSTMT :planTree {SEQSCAN relid 1} :rtables ({RTABLEENTRY relid 16424 })}"
+
+	value := processPlan(planDetail)
+
+	assert.Equal(t, 1, value.Plantree.Relid)
+}
+
+func TestParseAssignTableName(t *testing.T) {
+
+	planDetail := "{PLANNEDSTMT :planTree {SEQSCAN relid 1} :rtables ({RTABLEENTRY relid 16424 })}"
+
+	value := processPlan(planDetail)
+	populateTableNames(&value, []postgresTable{{16424, "flight"}})
+
+	assert.Equal(t, "flight", value.Plantree.Tablename)
+}
+
+func TestParseAssignTableNameOnNestedNode(t *testing.T) {
+
+	planDetail := "{PLANNEDSTMT :planTree {SEQSCAN lefttree {SEQSCAN relid 1}} :rtables ({RTABLEENTRY relid 16424 })}"
+
+	value := processPlan(planDetail)
+	populateTableNames(&value, []postgresTable{{16424, "flight"}})
+
+	assert.Equal(t, "flight", value.Plantree.Lefttree.Tablename)
+}
+
+func TestParseNullLeftTree(t *testing.T) {
+
+	planDetail := "{PLANNEDSTMT :planTree {SEQSCAN lefttree <>}}"
+
+	value := processPlan(planDetail)
+
+	assert.Equal(t, "SEQSCAN", value.Plantree.Nodetype)
+	assert.Equal(t, true, value.Plantree.Lefttree == nil)
 }
 
 func TestParsePlanSelect1(t *testing.T) {
 
-	plan_detail := `{PLANNEDSTMT :commandType 1 :queryId 6865378226349601843 :hasReturning false
+	// select 1;
+	planDetail := `{PLANNEDSTMT :commandType 1 :queryId 6865378226349601843 :hasReturning false
         :hasModifyingCTE false :canSetTag true :transientPlan false :dependsOnRole
         false :parallelModeNeeded false :jitFlags 0 :planTree {RESULT
         :plan.startup_cost 0 :plan.total_cost 0.01 :plan.plan_rows 1 :plan.plan_width
@@ -58,21 +91,14 @@ func TestParsePlanSelect1(t *testing.T) {
         :rewindPlanIDs (b) :rowMarks <> :relationOids <> :invalItems <>
         :paramExecTypes <> :utilityStmt <> :stmt_location 0 :stmt_len 8}`
 
-	plan := []rune(plan_detail)
-	value, err := parsePlan(plan)
-
-	t.Log(value)
-
-	if err != nil {
-		fmt.Println(err)
-		t.Fail()
-		return
-	}
+	value := processPlan(planDetail)
+	assert.NotNil(t, value)
 }
 
 func TestParsePlanSelectFromTable(t *testing.T) {
 
-	plan_detail := `{PLANNEDSTMT :commandType 1 :queryId 16893614937036654096 :hasReturning false
+	// Select * from flight;
+	planDetail := `{PLANNEDSTMT :commandType 1 :queryId 16893614937036654096 :hasReturning false
         :hasModifyingCTE false :canSetTag true :transientPlan false :dependsOnRole
         false :parallelModeNeeded false :jitFlags 0 :planTree {SEQSCAN
         :scan.plan.startup_cost 0 :scan.plan.total_cost 15455.779999999999
@@ -96,14 +122,8 @@ func TestParsePlanSelectFromTable(t *testing.T) {
         (o 16424) :invalItems <> :paramExecTypes <> :utilityStmt <> :stmt_location 0
         :stmt_len 28}`
 
-	plan := []rune(plan_detail)
-	value, err := parsePlan(plan)
+	value := processPlan(planDetail)
+	populateTableNames(&value, []postgresTable{{16424, "flight"}})
 
-	t.Log(value)
-
-	if err != nil {
-		fmt.Println(err)
-		t.Fail()
-		return
-	}
+	assert.Equal(t, "flight", value.Plantree.Tablename)
 }
