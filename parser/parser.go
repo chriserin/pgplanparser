@@ -24,6 +24,8 @@ type PlanNode struct {
 	Lefttree  *PlanNode
 	Righttree *PlanNode
 	Tablename string
+	Cmd       int
+	Strategy  int
 }
 
 func (stmt PlannedStatement) String() string {
@@ -142,11 +144,13 @@ func parseNode(cursor *int, tokens []tkn.Token) (PlanNode, error) {
 		if tkn.IsKey(currentToken, "lefttree") && nextToken.Token == tkn.ItemStart {
 			lefttree, _ := parseNode(cursor, tokens)
 			node.Lefttree = &lefttree
+			continue
 		}
 
 		if tkn.IsKey(currentToken, "righttree") && nextToken.Token == tkn.ItemStart {
 			righttree, _ := parseNode(cursor, tokens)
 			node.Righttree = &righttree
+			continue
 		}
 
 		if tkn.IsKey(currentToken, "relid") {
@@ -154,6 +158,23 @@ func parseNode(cursor *int, tokens []tkn.Token) (PlanNode, error) {
 			value := tokens[*cursor].Value
 			relid, _ := strconv.Atoi(value)
 			node.Relid = relid
+			continue
+		}
+
+		if node.Nodetype == "SETOP" && tkn.IsKey(currentToken, "cmd") {
+			*cursor++
+			value := tokens[*cursor].Value
+			cmd, _ := strconv.Atoi(value)
+			node.Cmd = cmd
+			continue
+		}
+
+		if node.Nodetype == "SETOP" && tkn.IsKey(currentToken, "strategy") {
+			*cursor++
+			value := tokens[*cursor].Value
+			strategy, _ := strconv.Atoi(value)
+			node.Strategy = strategy
+			continue
 		}
 
 		if currentToken.Token == tkn.ItemEnd && currentToken.Depth == currentLevel {

@@ -15,7 +15,6 @@ type line struct {
 }
 
 func Print(stmt psr.PlannedStatement) {
-	fmt.Println(stmt)
 	lines := []line{}
 	depth := 0
 	getLines(&lines, &stmt.Plantree, depth)
@@ -26,7 +25,9 @@ func Print(stmt psr.PlannedStatement) {
 func getLines(lines *[]line, node *psr.PlanNode, depth int) {
 	depth++
 	var b bytes.Buffer
+	b.WriteString(strategyStr(node.Nodetype, node.Strategy))
 	b.WriteString(node.Nodetype)
+	b.WriteString(cmdStr(node.Nodetype, node.Cmd))
 	b.WriteString(" ")
 	b.WriteString(node.Tablename)
 	*lines = append(*lines, line{depth, b.String()})
@@ -36,6 +37,33 @@ func getLines(lines *[]line, node *psr.PlanNode, depth int) {
 	if node.Righttree != nil {
 		getLines(lines, node.Righttree, depth)
 	}
+}
+
+func cmdStr(nodetype string, cmd int) string {
+	if nodetype != "SETOP" {
+		return ""
+	}
+	switch cmd {
+	case 0:
+		return "Intersect"
+	case 2:
+		return "Except"
+	}
+
+	return ""
+}
+
+func strategyStr(nodetype string, strategy int) string {
+	if nodetype != "SETOP" {
+		return ""
+	}
+
+	switch strategy {
+	case 1:
+		return "Hash"
+	}
+
+	return ""
 }
 
 func printPlan(lines []line) string {

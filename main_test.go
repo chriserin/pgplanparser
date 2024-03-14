@@ -51,6 +51,43 @@ func TestParseAssignTableName(t *testing.T) {
 	assert.Equal(t, "flight", value.Plantree.Tablename)
 }
 
+func TestParseSetopExcept(t *testing.T) {
+
+	planDetail := "{PLANNEDSTMT :planTree {SETOP cmd 2}}"
+
+	value := processPlan(planDetail)
+
+	assert.Equal(t, 2, value.Plantree.Cmd)
+}
+
+func TestParseSetopIntersect(t *testing.T) {
+
+	planDetail := "{PLANNEDSTMT :planTree {SETOP cmd 0}}"
+
+	value := processPlan(planDetail)
+
+	assert.Equal(t, 0, value.Plantree.Cmd)
+}
+
+func TestParseSetopHash(t *testing.T) {
+
+	planDetail := "{PLANNEDSTMT :planTree {SETOP strategy 1}}"
+
+	value := processPlan(planDetail)
+
+	assert.Equal(t, 1, value.Plantree.Strategy)
+}
+
+func TestParseSetopHashIntersect(t *testing.T) {
+
+	planDetail := "{PLANNEDSTMT :planTree {SETOP cmd 0 strategy 1}}"
+
+	value := processPlan(planDetail)
+
+	assert.Equal(t, 0, value.Plantree.Cmd)
+	assert.Equal(t, 1, value.Plantree.Strategy)
+}
+
 func TestParseAssignTableNameOnNestedNode(t *testing.T) {
 
 	planDetail := "{PLANNEDSTMT :planTree {SEQSCAN lefttree {SEQSCAN relid 1}} :rtables ({RTABLEENTRY relid 16424 })}"
